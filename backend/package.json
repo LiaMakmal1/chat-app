@@ -1,15 +1,14 @@
 {
   "_comment0": "- package.json is the config file for the backend",
   "_comment1": "- package.json uses 'scripts' that allow to run commands like 'npm run dev",
-
-
   "name": "backend",
   "version": "1.0.0",
   "description": "",
-  "main": "src/index.js", 
+  "main": "src/index.js",
   "scripts": {
     "dev": "nodemon src/index.js",
-    "start": "node src/index.js"
+    "start": "node src/index.js",
+    "start:cluster": "node src/cluster.js"
   },
   "keywords": [],
   "author": "",
@@ -22,9 +21,12 @@
     "cors": "^2.8.5",
     "dotenv": "^16.4.5",
     "express": "^4.21.1",
+    "express-rate-limit": "^7.5.0",
+    "helmet": "^8.1.0",
     "jsonwebtoken": "^9.0.2",
     "mongoose": "^8.8.1",
-    "socket.io": "^4.8.1"
+    "socket.io": "^4.8.1",
+    "xss": "^1.0.15"
   },
   "devDependencies": {
     "nodemon": "^3.1.7"

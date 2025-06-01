@@ -18,10 +18,26 @@ import authRoutes from "./routes/auth.route.js";
 import messageRoutes from "./routes/message.route.js";
 import { app, server } from "./lib/socket.js";
 
+// Import security middleware
+import { 
+  securityHeaders, 
+  createRateLimit, 
+  xssProtection, 
+  validateInput, 
+  noSqlInjectionProtection 
+} from "./middleware/security.middleware.js";
+
 dotenv.config(); // loads environment var into Node.js
 
 const PORT = process.env.PORT;
 const __dirname = path.resolve(); // the path of the project folder
+
+// Apply security middleware
+app.use(securityHeaders); // Security headers
+app.use(createRateLimit()); // General rate limiting
+app.use(xssProtection); // XSS protection
+app.use(validateInput); // Input validation
+app.use(noSqlInjectionProtection); // NoSQL injection protection
 
 app.use(express.json({ limit: "10mb" })); // automatic JSON parsing in request bodies
 app.use(cookieParser()); // adds req.cookies 

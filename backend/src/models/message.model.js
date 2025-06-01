@@ -19,6 +19,11 @@ const messageSchema = new mongoose.Schema(
     text: {
       type: String,
     },
+    encryptedData: { // store encrypted message data
+      encrypted: String,
+      iv: String,
+      tag: String
+    },
     image: { // store as a URL or base64 string
       type: String, 
     },

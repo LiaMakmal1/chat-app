@@ -17,11 +17,24 @@ const userSchema = new mongoose.Schema(
     password: {
       type: String,
       required: true,
-      minlength: 6, // I will probably add more password conditions
+      minlength: 8, // Enhanced security requirement
     },
     profilePic: {
       type: String,
       default: "",
+    },
+    loginAttempts: {
+      type: Number,
+      default: 0
+    },
+    lockUntil: {
+      type: Date
+    },
+    lastLogin: {
+      type: Date
+    },
+    securityHash: {
+      type: String // Additional security field
     },
   },
   { timestamps: true } // for createdAt and updatedAt

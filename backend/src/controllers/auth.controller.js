@@ -4,6 +4,7 @@ import { generateToken } from "../lib/utils.js"; // set it in the cookie
 import User from "../models/user.model.js";
 import bcrypt from "bcryptjs"; // hashing and verifying passwords
 import cloudinary from "../lib/cloudinary.js";
+import { hashData, generateSecureToken } from "../lib/encryption.js";
 
 // registers new users and stores them in the database
 export const signup = async (req, res) => {
@@ -13,8 +14,16 @@ export const signup = async (req, res) => {
       return res.status(400).json({ message: "All fields are required" });
     }
 
-    if (password.length < 6) {
-      return res.status(400).json({ message: "Password must be at least 6 characters" });
+    if (password.length < 8) {
+      return res.status(400).json({ message: "Password must be at least 8 characters" });
+    }
+
+    // Enhanced password validation
+    const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]/;
+    if (!passwordRegex.test(password)) {
+      return res.status(400).json({ 
+        message: "Password must contain at least one uppercase letter, one lowercase letter, one number, and one special character" 
+      });
     }
 
     const user = await User.findOne({ email });
@@ -60,10 +69,35 @@ export const login = async (req, res) => {
       return res.status(400).json({ message: "Invalid credentials" });
     }
 
+    // Check if account is locked
+    if (user.lockUntil && user.lockUntil > Date.now()) {
+      return res.status(423).json({ 
+        message: "Account temporarily locked due to too many failed login attempts" 
+      });
+    }
+
     const isPasswordCorrect = await bcrypt.compare(password, user.password);
     if (!isPasswordCorrect) {
+      // Increment login attempts
+      const updates = { $inc: { loginAttempts: 1 } };
+      
+      // Lock account after 5 failed attempts for 15 minutes
+      if (user.loginAttempts >= 4) {
+        updates.$set = {
+          lockUntil: Date.now() + 15 * 60 * 1000, // 15 minutes
+          loginAttempts: 0
+        };
+      }
+      
+      await User.findByIdAndUpdate(user._id, updates);
       return res.status(400).json({ message: "Invalid credentials" });
     }
+
+    // Reset login attempts and update last login on successful login
+    await User.findByIdAndUpdate(user._id, {
+      $unset: { loginAttempts: 1, lockUntil: 1 },
+      $set: { lastLogin: new Date() }
+    });
 
     generateToken(user._id, res);
 
