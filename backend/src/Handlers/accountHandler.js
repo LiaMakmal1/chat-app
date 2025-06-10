@@ -1,5 +1,3 @@
-// This file exports controller functions that handle user authentication and profile
-
 import { generateToken } from "../lib/tools.js"; // set it in the cookie
 import User from "../schema/userSchema.js";
 import bcrypt from "bcryptjs"; // hashing and verifying passwords
@@ -60,8 +58,8 @@ export const signup = async (req, res) => {
     });
 
   } catch (error) {
-    console.log("Error in signup controller", error.message);
-    return res.status(500).json({ message: "Internal Server Error" });
+    console.log("Signup failed:", error.message);
+    return res.status(500).json({ message: "Something went wrong" });
   }
 };
 
@@ -118,9 +116,9 @@ export const signIn = async (req, res) => {
       avatar: user.avatar,
     });
 
-  } catch (error) {
-    console.log("Error in signIn controller", error.message);
-    return res.status(500).json({ message: "Internal Server Error" });
+  } catch (err) {
+    console.error(`Login error: ${err}`);
+    return res.status(500).json({ message: "Server error, try again later" });
   }
 };
 
@@ -131,9 +129,9 @@ export const signOut = (req, res) => {
     // Invalidate the JWT cookie by setting it to an empty string and expiring it immediately
     res.clearCookie("jwt", { maxAge: 0 }); // alt: clearCookie instead of res.cookie
     return res.status(200).json({ message: "See you next time!" });
-  } catch (error) {
-    console.log("Error in signOut controller", error.message);
-    return res.status(500).json({ message: "Internal Server Error" });
+  } catch (e) {
+    console.log("Logout failed", e);
+    res.status(500).json({ message: "Couldn't log you out properly" });
   }
 };
 
@@ -157,8 +155,8 @@ export const updateProfile = async (req, res) => {
 
     return res.status(200).json(updatedUser);
   } catch (error) {
-    console.log("error in update profile:", error);
-    return res.status(500).json({ message: "Internal server error" });
+    console.log("Profile update error:", error);
+    return res.status(500).json({ message: "Failed to update profile", error: true });
   }
 };
 
@@ -173,4 +171,3 @@ export const checkAuth = (req, res) => {
     return res.status(500).json({ message: "Internal Server Error" });
   }
 };
-

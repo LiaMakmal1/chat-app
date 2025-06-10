@@ -1,5 +1,3 @@
-// this file specifies controller methods to retrieve chat users, get messages between users, and transmit new messages
-
 import User from "../schema/userSchema.js"
 import Message from "../schema/msgSchema.js";
 
@@ -15,74 +13,75 @@ const __dirname = path.dirname(__filename);
 // returns a list of all users except the currently user
 export const UserList = async (req, res) => {
   try {
-    const loggedId = req.user._id;
+    const currentUserId = req.user._id;
         // all the users except the currently
-    const filter = await User.find({ _id: { $ne: loggedId } }).select("userName avatar _id email");
+    const users = await User.find({ _id: { $ne: currentUserId } }).select("userName avatar _id email");
 
-    res.status(200).json(filter);
-  } catch (error) {
-    console.error("Error in UserList: ", error.message);
-    res.status(500).json({ error: "Internal server error" });
+    res.status(200).json(users);
+  } catch (err) {
+    console.log("UserList error: " + err.message);
+    res.status(500).json({ error: "Failed to get users" });
   }
 };
 
-// history between the currently user and another user
+// get chat history
 export const history = async (req, res) => {
-  try {
-    const { id: userToChatId } = req.params; // other user
-    const myId = req.user._id;
+  const { id: receiverId } = req.params; // other user
+  const senderId = req.user._id;
 
-    // get all messages where sender is me or the other person
-    const messages = await Message.find({
+  try {
+    // find messages
+    let msgs = await Message.find({
       $or: [
-        { fromUserId: myId, toUserId: userToChatId },
-        { fromUserId: userToChatId, toUserId: myId },
+        { fromUserId: senderId, toUserId: receiverId },
+        { fromUserId: receiverId, toUserId: senderId },
       ],
     });
 
-    // dec messages for client
-    const decrypted = messages.map(message => {
+    // decrypt
+    let result = [];
+    for(let msg of msgs) {
       try {
-        if (message.text && message.encData) {
-          return {
-            ...message.toObject(),
-            text: decText(message.encData),
-            encData: undefined
-          };
+        if (msg.text && msg.encData) {
+          const obj = msg.toObject();
+          obj.text = decText(msg.encData);
+          delete obj.encData;
+          result.push(obj);
+        } else {
+          result.push(msg.toObject());
         }
-        return message.toObject();
-      } catch (error) {
-        console.error("Error decrypting message:", error);
-        return {
-          ...message.toObject(),
-          text: "[Message could not be decrypted]"
-        };
+      } catch (e) {
+        console.log("Decrypt failed:", e);
+        const obj = msg.toObject();
+        obj.text = "[Encrypted message]";
+        result.push(obj);
       }
-    });
+    }
 
-    res.status(200).json(decrypted);
-  } catch (error) {
-    console.log("Error in history controller: ", error.message);
-    res.status(500).json({ error: "Internal server error" });
+    return res.status(200).json(result);
+  } catch (e) {
+    console.log("History fetch error:", e);
+    res.status(500).json({ error: "Could not load messages" });
   }
 };
 
-export const sendMsg = async (req, res) => {
+export async function sendMsg(req, res) {
   try {
-    const { text, image } = req.body;
-    const { id: toUserId } = req.params;
-    const fromUserId = req.user._id;
+    const msgText = req.body.text;
+    const msgImage = req.body.image;
+    const targetUserId = req.params.id;
+    const sourceUserId = req.user._id;
 
     let imageUrl;
-    if (image) {
+    if (msgImage) {
       // worker thread for image processing to avoid blocking main thread
       const workerPath = path.join(__dirname, "../workers/imgHandler.js");
       const worker = new Worker(workerPath);
-      
+
       // Process image in worker thread
       const imgProcess = new Promise((resolve, reject) => {
-        worker.postMessage({ image });
-        
+        worker.postMessage({ image: msgImage });
+
         worker.on("message", (result) => {
           worker.terminate();
           if (result.success) {
@@ -91,60 +90,60 @@ export const sendMsg = async (req, res) => {
             reject(new Error(result.error));
           }
         });
-        
+
         worker.on("error", (error) => {
           worker.terminate();
           reject(error);
         });
       });
-      
+
       imageUrl = await imgProcess;
     }
 
     // Encrypt sensitive text data before saving
     let encData;
-    if (text) {
+    if (msgText) {
       try {
-        encData = encText(text);
+        encData = encText(msgText);
       } catch (error) {
         console.error("Encryption error:", error);
         return res.status(500).json({ error: "Failed to secure message" });
       }
     }
 
-    // create a new message document
+    // create message in DB
     const newMsg = new Message({
-      fromUserId,
-      toUserId,
-      text: text ? "[Encrypted]" : undefined, // Store placeholder
+      fromUserId: sourceUserId,
+      toUserId: targetUserId,
+      text: msgText ? "[Encrypted]" : undefined,
       encData: encData,
       image: imageUrl,
     });
 
     await newMsg.save();
 
-    // if the recipient is online, send them the new message via Socket.IO
-    const recvSockId = userSocketId(toUserId);
-    if (recvSockId) {
-      // Send decrypted message to real-time socket
-      const socketMessage = {
+    // send to recipient if online
+    const recipientSocketId = userSocketId(targetUserId);
+    if (recipientSocketId) {
+      const msgForSocket = {
         ...newMsg.toObject(),
-        text: text, // Send original text for real-time display
+        text: msgText,
         encData: undefined
       };
-      io.to(recvSockId).emit("newMsg", socketMessage);
+      io.to(recipientSocketId).emit("newMsg", msgForSocket);
     }
 
-    // Return decrypted message to sender
-    const responseMsg = {
+    // send back to sender
+    const msgResponse = {
       ...newMsg.toObject(),
-      text: text,
+      text: msgText,
       encData: undefined
     };
 
-    res.status(201).json(responseMsg);
+    res.status(201).json(msgResponse);
   } catch (error) {
-    console.log("Error in sendMsg controller: ", error.message);
-    res.status(500).json({ error: "Internal server error" });
+    // TODO: improve error handling
+    console.log("Message send failed: " + error.message);
+    res.status(500).json({ error: "Couldn't send message", success: false });
   }
 };

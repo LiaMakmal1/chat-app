@@ -1,115 +1,136 @@
 import { useState } from "react";
 import { authState } from "../state/authState";
-import SidePattern from "../components/SidePattern";
 import { Link } from "react-router-dom";
-import { Eye, EyeOff, Loader2, Lock, Mail, MessageSquare } from "lucide-react";
+import { Eye, EyeOff, Loader2, Lock, Mail, MessageSquare, ArrowRight } from "lucide-react";
 
 const SignInView = () => {
-  const [showPassword, setShowPassword] = useState(false);
-  const [formData, setFormData] = useState({ email: "", password: ""});
+  const [showPwd, setShowPwd] = useState(false);
+  const [data, setData] = useState({ 
+    email: "", 
+    pwd: ""
+  });
   const { signIn, isLoggingIn } = authState();
 
-  const handleSubmit = async (e) => {
+  const submit = (e) => {
     e.preventDefault();
-    signIn(formData);
+    signIn({
+      email: data.email,
+      password: data.pwd
+    });
   };
 
   return (
-    <div className="h-screen grid lg:grid-cols-2">
-      {/* Form */}
-      <div className="flex flex-col justify-center items-center p-6 sm:p-12">
-        <div className="w-full max-w-md space-y-8">
-          {/* Logo */}
-          <div className="text-center mb-8">
-            <div className="flex flex-col items-center gap-2 group">
-              <div
-                className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center group-hover:bg-primary/20
-              transition-colors"
-              >
-                <MessageSquare className="w-6 h-6 text-primary" />
+    <div className="min-h-screen flex flex-col lg:flex-row bg-base-100">
+      {/* Left side - Pattern */}
+      <div className="hidden lg:flex lg:w-5/12 bg-base-200 relative overflow-hidden">
+        <div className="absolute inset-0 bg-gradient-to-br from-primary/20 to-base-200"></div>
+        <div className="relative z-10 flex items-center justify-center w-full h-full p-12">
+          <div className="max-w-md text-center">
+            <div className="mb-8 flex justify-center">
+              <div className="size-16 rounded-full bg-primary/10 flex items-center justify-center">
+                <MessageSquare className="size-8 text-primary" />
               </div>
-              <h1 className="text-2xl font-bold mt-2">Welcome Back</h1>
-              <p className="text-base-content/60">Sign in to your account</p>
+            </div>
+            <h2 className="text-4xl font-bold mb-4">Welcome Back</h2>
+            <p className="text-lg text-base-content/70">
+              Sign in to continue your conversations and catch up with your messages.
+            </p>
+
+            <div className="mt-12 p-6 bg-base-100/30 backdrop-blur-sm rounded-xl shadow-lg">
+              <p className="italic text-base-content/80">
+                "I love how easy it is to stay connected with my team using Chatty!"
+              </p>
+              <p className="mt-4 font-semibold">— Alex Chen, Developer</p>
             </div>
           </div>
+        </div>
+      </div>
 
-          {/* Form */}
-          <form onSubmit={handleSubmit} className="space-y-6">
-            <div className="form-control">
-              <label className="label">
-                <span className="label-text font-medium">Email</span>
-              </label>
-              <div className="relative">
-                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                  <Mail className="h-5 w-5 text-base-content/40" />
+      {/* Right side - Form */}
+      <div className="flex-1 flex items-center justify-center p-6">
+        <div className="w-full max-w-md">
+          <div className="mb-8">
+            <h1 className="text-3xl font-bold">Sign in</h1>
+            <p className="mt-2 text-base-content/60">Welcome back! Please enter your details</p>
+          </div>
+
+          <form onSubmit={submit} className="space-y-5">
+            {/* Email field */}
+            <div>
+              <label className="block text-sm font-medium mb-2">Email Address</label>
+              <div className="relative rounded-lg shadow-sm">
+                <div className="absolute inset-y-0 left-0 pl-3 flex items-center">
+                  <Mail className="size-5 text-primary/70" />
                 </div>
                 <input
                   type="email"
-                  className={`input input-bordered w-full pl-10`}
+                  className="input input-bordered w-full pl-10 bg-base-200/50"
                   placeholder="you@example.com"
-                  value={formData.email}
-                  onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                  value={data.email}
+                  onChange={(e) => setData({ ...data, email: e.target.value })}
                 />
               </div>
             </div>
 
-            <div className="form-control">
-              <label className="label">
-                <span className="label-text font-medium">Password</span>
-              </label>
-              <div className="relative">
-                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                  <Lock className="h-5 w-5 text-base-content/40" />
+            {/* Password field */}
+            <div>
+              <label className="block text-sm font-medium mb-2">Password</label>
+              <div className="relative rounded-lg shadow-sm">
+                <div className="absolute inset-y-0 left-0 pl-3 flex items-center">
+                  <Lock className="size-5 text-primary/70" />
                 </div>
                 <input
-                  type={showPassword ? "text" : "password"}
-                  className={`input input-bordered w-full pl-10`}
+                  type={showPwd ? "text" : "password"}
+                  className="input input-bordered w-full pl-10 bg-base-200/50"
                   placeholder="••••••••"
-                  value={formData.password}
-                  onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                  value={data.pwd}
+                  onChange={(e) => setData({ ...data, pwd: e.target.value })}
                 />
                 <button
                   type="button"
                   className="absolute inset-y-0 right-0 pr-3 flex items-center"
-                  onClick={() => setShowPassword(!showPassword)}
+                  onClick={() => setShowPwd(!showPwd)}
                 >
-                  {showPassword ? (
-                    <EyeOff className="h-5 w-5 text-base-content/40" />
+                  {showPwd ? (
+                    <EyeOff className="size-5 text-base-content/40" />
                   ) : (
-                    <Eye className="h-5 w-5 text-base-content/40" />
+                    <Eye className="size-5 text-base-content/40" />
                   )}
                 </button>
               </div>
             </div>
 
-            <button type="submit" className="btn btn-primary w-full" disabled={isLoggingIn}>
+            {/* Submit button */}
+            <button 
+              type="submit" 
+              className="btn btn-primary w-full mt-6 gap-2" 
+              disabled={isLoggingIn}
+            >
               {isLoggingIn ? (
                 <>
-                  <Loader2 className="h-5 w-5 animate-spin" />
-                  Loading...
+                  <Loader2 className="size-5 animate-spin" />
+                  Signing in...
                 </>
               ) : (
-                "Sign in"
+                <>
+                  Sign in
+                  <ArrowRight className="size-4" />
+                </>
               )}
             </button>
           </form>
 
-          <div className="text-center">
-            <p className="text-base-content/60">
-              Don&apos;t have an account?{" "}
-              <Link to="/signup" className="link link-primary">
+          {/* Sign up link */}
+          <div className="mt-8 text-center">
+            <p className="text-base-content/70">
+              Don't have an account?{" "}
+              <Link to="/signup" className="text-primary font-medium hover:underline">
                 Create account
               </Link>
             </p>
           </div>
         </div>
       </div>
-
-      {/* Pattern */}
-      <SidePattern
-        title={"Welcome to Chatty!"}
-        subtitle={"Sign in to continue your conversations and catch up with your messages."}
-      />
     </div>
   );
 };
