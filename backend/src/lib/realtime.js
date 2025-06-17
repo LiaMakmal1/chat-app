@@ -61,6 +61,12 @@ io.on("connection", (socket) => {  // handle new client connections
 
   // send events to all the connected clients
   io.emit("getOnlineUsers", Object.keys(socketMap));
+  
+  // Notify user about reconnection - they may need to re-exchange keys
+  socket.emit("connectionEstablished", { 
+    userId: userId,
+    message: "Connected successfully. You may need to re-exchange keys for encrypted messaging." 
+  });
 
   // Rate limit for socket events
   let msgCount = 0;
@@ -73,6 +79,40 @@ io.on("connection", (socket) => {  // handle new client connections
     if (msgCount > 30) { // Max 30 messages per minute
       socket.emit("error", "Rate limit exceeded");
       return;
+    }
+  });
+
+  // Handle key exchange events
+  socket.on("keyExchangeRequest", (data) => {
+    msgCount++;
+    if (msgCount > 30) {
+      socket.emit("error", "Rate limit exceeded");
+      return;
+    }
+    // Forward key exchange request to target user
+    if (data && data.targetUserId && socketMap[data.targetUserId]) {
+      socket.to(socketMap[data.targetUserId]).emit("keyExchangeRequest", {
+        from: userId,
+        publicKey: data.publicKey,
+        sessionId: data.sessionId
+      });
+    }
+  });
+
+  socket.on("keyExchangeResponse", (data) => {
+    msgCount++;
+    if (msgCount > 30) {
+      socket.emit("error", "Rate limit exceeded");
+      return;
+    }
+    // Forward key exchange response to initiator
+    if (data && data.targetUserId && socketMap[data.targetUserId]) {
+      socket.to(socketMap[data.targetUserId]).emit("keyExchangeResponse", {
+        from: userId,
+        publicKey: data.publicKey,
+        sessionId: data.sessionId,
+        accepted: data.accepted
+      });
     }
   });
 

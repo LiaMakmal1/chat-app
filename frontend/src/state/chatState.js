@@ -36,11 +36,11 @@ export const chatState = create((set, get) => ({
   initializeDH: async () => {
     try {
       dhKeyPair = await generateDHKeyPair();
-      const socket = getSocket();
+      const socketInstance = authState.getState().socket;
       const pubKeyRaw = await exportPublicKey(dhKeyPair.publicKey);
       const myId = authState.getState().user._id;
 
-      socket.emit("exchange-dh", {
+      socketInstance.emit("exchange-dh", {
         from: myId,
         publicKey: Array.from(pubKeyRaw), // Send as plain array
       });
