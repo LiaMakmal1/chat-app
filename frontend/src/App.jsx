@@ -9,6 +9,8 @@ import SignInView from "./views/SignInView";
 import SettingsView from "./views/SettingsView";
 import ProfileView from "./views/ProfileView";
 import { chatState } from "./state/chatState";
+import DHTestComponent from "./components/DHTestComponent";
+
 
 import { Routes, Route, Navigate } from "react-router-dom";
 import { authState } from "./state/authState";
@@ -63,6 +65,9 @@ const App = () => {
 
         {/* Private route: profile */}
         <Route path="/profile" element={authUser ? <ProfileView /> : <Navigate to="/signIn" />} />
+     
+        <Route path="/dh-test" element={<DHTestComponent />} />
+
       </Routes>
 
       {/*  notification system */}

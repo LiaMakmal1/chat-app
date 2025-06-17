@@ -1,37 +1,45 @@
-import { Buffer } from "buffer";
-
 export async function aesEncryptWithKey(plaintext, key) {
-  const enc = new TextEncoder();
-  const iv = crypto.getRandomValues(new Uint8Array(12));
+  try {
+    const iv = crypto.getRandomValues(new Uint8Array(12));
+    const encodedText = new TextEncoder().encode(plaintext);
+    
+    const encrypted = await crypto.subtle.encrypt(
+      {
+        name: 'AES-GCM',
+        iv: iv
+      },
+      key,
+      encodedText
+    );
 
-  const encryptedContent = await crypto.subtle.encrypt(
-    {
-      name: "AES-GCM",
-      iv: iv,
-    },
-    key,
-    enc.encode(plaintext)
-  );
-
-  return {
-    cipherText: Buffer.from(encryptedContent).toString("hex"),
-    iv: Buffer.from(iv).toString("hex"),
-  };
+    return {
+      cipherText: Array.from(new Uint8Array(encrypted)).map(b => b.toString(16).padStart(2, '0')).join(''),
+      iv: Array.from(iv).map(b => b.toString(16).padStart(2, '0')).join('')
+    };
+  } catch (error) {
+    console.error('Encryption failed:', error);
+    throw new Error('Failed to encrypt message');
+  }
 }
 
-export async function aesDecryptWithKey(cipherTextHex, ivHex, key) {
-  const cipherText = Buffer.from(cipherTextHex, "hex");
-  const iv = Buffer.from(ivHex, "hex");
+export async function aesDecryptWithKey(cipherTextHex, key, ivHex) {
+  try {
+    const cipherText = new Uint8Array(cipherTextHex.match(/.{1,2}/g).map(byte => parseInt(byte, 16)));
+    const iv = new Uint8Array(ivHex.match(/.{1,2}/g).map(byte => parseInt(byte, 16)));
+    
+    const decrypted = await crypto.subtle.decrypt(
+      {
+        name: 'AES-GCM',
+        iv: iv
+      },
+      key,
+      cipherText
+    );
 
-  const decryptedContent = await crypto.subtle.decrypt(
-    {
-      name: "AES-GCM",
-      iv: iv,
-    },
-    key,
-    cipherText
-  );
-
-  const dec = new TextDecoder();
-  return dec.decode(decryptedContent);
+    const decryptedText = new TextDecoder().decode(decrypted);
+    return decryptedText;
+  } catch (error) {
+    console.error('Decryption failed:', error);
+    throw new Error('Failed to decrypt message');
+  }
 }
