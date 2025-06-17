@@ -98,6 +98,13 @@ export const authState = create((set, get) => ({
     socket.on("getOnlineUsers", (userIds) => {
       set({ onlineUsers: userIds });
     });
+
+    // Import chatState for DH handling
+    socket.on("receive-dh", (data) => {
+      import('./chatState.js').then(({ chatState }) => {
+        chatState.getState().receiveDHKey(data.fromUserId, data.publicKey);
+      });
+    });
   },
   disconnectSocket: () => {
     if (get().socket?.connected) get().socket.disconnect();

@@ -1,10 +1,19 @@
-import { X } from "lucide-react";
+import { X, Lock, Unlock } from "lucide-react";
 import { authState } from "../state/authState";
 import { chatState } from "../state/chatState";
 
 const ChatBar = () => {
-  const { selectedUser, setSelectedUser } = chatState();
-  const { onlineUsers } = authState();
+  const { selectedUser, setSelectedUser, initializeDH, getSharedKeyForUser } = chatState();
+  const { onlineUsers, authUser } = authState();
+
+  // Check if we have an active shared key with this user
+  const hasSharedKey = selectedUser && getSharedKeyForUser(selectedUser._id) !== null;
+
+  const handleInitiateDH = () => {
+    if (!hasSharedKey) {
+      initializeDH();
+    }
+  };
 
   return (
     <div className="p-2.5 border-b border-base-300">
@@ -26,10 +35,34 @@ const ChatBar = () => {
           </div>
         </div>
 
-        {/* Close button */}
-        <button onClick={() => setSelectedUser(null)}>
-          <X />
-        </button>
+        {/* Encryption and close buttons */}
+        <div className="flex items-center gap-2">
+          {/* Encryption status button */}
+          <button
+            onClick={handleInitiateDH}
+            className={`p-2 rounded-lg transition-colors ${
+              hasSharedKey 
+                ? 'text-green-600 bg-green-100 cursor-default' 
+                : 'text-blue-600 hover:bg-blue-100'
+            }`}
+            title={
+              hasSharedKey 
+                ? 'End-to-end encryption is active' 
+                : 'Click to initiate secure key exchange'
+            }
+          >
+            {hasSharedKey ? (
+              <Lock className="w-4 h-4" />
+            ) : (
+              <Unlock className="w-4 h-4" />
+            )}
+          </button>
+
+          {/* Close button */}
+          <button onClick={() => setSelectedUser(null)}>
+            <X />
+          </button>
+        </div>
       </div>
     </div>
   );

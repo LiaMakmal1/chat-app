@@ -14,7 +14,7 @@ export const rateLimiter   = (windowMs = 10 * 60 * 1000, max = 100) => {
 // Rate limit for signIn attempts
 export const logLimiter = rateLimit({
   windowMs: 10 * 60 * 1000,
-  max: 5,
+  max: 50,
   message: {
     error: "Too many signIn attempts. Try again in 10 minutes.",
   },
