@@ -6,7 +6,6 @@ import MessageInput from "./ChatInput";
 import ChatLoading from "./skeletons/ChatLoading";
 import { authState } from "../state/authState";
 import { formatMessageTime } from "../lib/utils";
-import { aesDecryptWithKey } from "../utils/encryption";
 
 const ChatView = () => {
   const {
@@ -19,31 +18,10 @@ const ChatView = () => {
   } = chatState();
   const { authUser } = authState();
   const msgEndRef = useRef(null);
-  const [decryptedMessages, setDecryptedMessages] = useState([]);
-
-
-  useEffect(() => {
-  const decryptAll = async () => {
-    const rawMsgs = chatState.getState().messages;
-    const sharedKey = chatState.getState().getSharedKeyForUser(chatState.getState().selectedUser?._id);
-    const decrypted = await Promise.all(rawMsgs.map((msg) => {
-      if (msg.cipherText && sharedKey) {
-        return aesDecryptWithKey(msg.cipherText, sharedKey, msg.iv);
-      } else {
-        return msg.text || "";
-      }
-    }));
-    setDecryptedMessages(decrypted);
-  };
-  decryptAll();
-}, [chatState().messages]);
-
 
   useEffect(() => {
     history(selectedUser._id);
-
     syncMsgs();
-
     return () => offMessages();
   }, [selectedUser._id, history, syncMsgs, offMessages]);
 
@@ -68,8 +46,7 @@ const ChatView = () => {
       <ChatHeader />
 
       <div className="flex-1 overflow-y-auto p-4 space-y-4">
-        {messages.map((message, index) => (
-
+        {messages.map((message) => (
           <div
             key={message._id}
             className={`chat ${message.fromUserId === authUser._id ? "chat-end" : "chat-start"}`}
@@ -100,11 +77,9 @@ const ChatView = () => {
                   className="sm:max-w-[200px] rounded-md mb-2"
                 />
               )}
-              {decryptedMessages[index] && decryptedMessages[index].trim() !== "" && (
-  <p>{decryptedMessages[index]}</p>
-)}
-
-
+              {message.text && message.text.trim() !== "" && (
+                <p>{message.text}</p>
+              )}
             </div>
           </div>
         ))}

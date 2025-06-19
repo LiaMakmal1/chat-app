@@ -17,7 +17,6 @@ export const authState = create((set, get) => ({
   checkAuth: async () => {
     try {
       const res = await axiosInstance.get("/auth/check");
-
       set({ authUser: res.data });
       get().connectSocket();
     } catch (error) {
@@ -48,7 +47,6 @@ export const authState = create((set, get) => ({
       const res = await axiosInstance.post("/auth/signIn", data);
       set({ authUser: res.data });
       toast.success("Logged in successfully!");
-
       get().connectSocket();
     } catch (error) {
       toast.error(error.response.data.message);
@@ -60,6 +58,11 @@ export const authState = create((set, get) => ({
   signOut: async () => {
     try {
       await axiosInstance.post("/auth/signOut");
+      
+      // Clear DH state on logout
+      const { chatState } = await import('./chatState.js');
+      chatState.getState().clearDHState();
+      
       set({ authUser: null });
       toast.success("Logged out successfully!");
       get().disconnectSocket();
@@ -106,7 +109,8 @@ export const authState = create((set, get) => ({
       });
     });
   },
+  
   disconnectSocket: () => {
     if (get().socket?.connected) get().socket.disconnect();
   },
-})); 
+}));

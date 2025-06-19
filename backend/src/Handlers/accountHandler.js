@@ -11,7 +11,7 @@ export const signup = async (req, res) => {
     // Check for missing fields
     const missingField = !fullName || !email || !password;
     if (missingField) {
-      return res.status(400).json({ message: "Oops! Don’t forget to complete all the fields" });
+      return res.status(400).json({ message: "Oops! Don't forget to complete all the fields" });
     }
 
     // Enforce minimum password length
@@ -71,7 +71,7 @@ export const signIn = async (req, res) => {
     // check if user exist
     const user = await User.findOne({ email });
     if (user == null) {
-      return res.status(400).json({ message: "Hmm... that email doesn’t seem to be registered" });
+      return res.status(400).json({ message: "Hmm... that email doesn't seem to be registered" });
     }
 
     // Check if account is locked
@@ -122,7 +122,6 @@ export const signIn = async (req, res) => {
   }
 };
 
-
 // logs out the user by clearing the JWT cookie
 export const signOut = (req, res) => {
   try {
@@ -134,7 +133,6 @@ export const signOut = (req, res) => {
     res.status(500).json({ message: "Couldn't log you out properly" });
   }
 };
-
 
 // updates user's profile picture (with Cloudinary)
 export const updateProfile = async (req, res) => {
@@ -161,7 +159,6 @@ export const updateProfile = async (req, res) => {
 };
 
 // returns the authenticated user's data (frontend)
-
 export const checkAuth = (req, res) => {
   try {
     const authenticatedUser = req.user;

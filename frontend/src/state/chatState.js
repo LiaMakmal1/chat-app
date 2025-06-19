@@ -4,8 +4,48 @@ import { axiosInstance } from "../lib/axios";
 import { authState } from "./authState";
 import DHKeyExchange from "../utils/dh";
 
-// Global DH instance
+// Global DH instance - but we need to persist keys across sessions
 let dhInstance = null;
+
+// Helper to store DH keys in localStorage for persistence
+const DHStorage = {
+  saveKeys: (userId, privateKey, publicKey, sharedKeys) => {
+    try {
+      const keyData = {
+        privateKey: privateKey.toString(16),
+        publicKey: publicKey.toString(16),
+        sharedKeys: Array.from(sharedKeys.entries()).map(([id, key]) => [id, Array.from(new Uint8Array(key))])
+      };
+      localStorage.setItem(`dh_keys_${userId}`, JSON.stringify(keyData));
+    } catch (error) {
+      console.error('Failed to save DH keys:', error);
+    }
+  },
+
+  loadKeys: async (userId) => {
+    try {
+      const stored = localStorage.getItem(`dh_keys_${userId}`);
+      if (!stored) return null;
+      
+      const keyData = JSON.parse(stored);
+      return {
+        privateKey: BigInt('0x' + keyData.privateKey),
+        publicKey: BigInt('0x' + keyData.publicKey),
+        sharedKeys: new Map(keyData.sharedKeys.map(([id, keyArray]) => [
+          id, 
+          new Uint8Array(keyArray).buffer
+        ]))
+      };
+    } catch (error) {
+      console.error('Failed to load DH keys:', error);
+      return null;
+    }
+  },
+
+  clearKeys: (userId) => {
+    localStorage.removeItem(`dh_keys_${userId}`);
+  }
+};
 
 export const chatState = create((set, get) => ({
   messages: [],
@@ -15,11 +55,48 @@ export const chatState = create((set, get) => ({
   msgsLoading: false,
   dhStatus: {}, // userId -> 'pending' | 'completed' | 'failed'
 
+  // Initialize DH instance with stored keys if available
+  initializeDHInstance: async () => {
+    const authUser = authState.getState().authUser;
+    if (!authUser) return;
+
+    if (!dhInstance) {
+      dhInstance = new DHKeyExchange();
+      
+      // Try to restore keys from storage
+      const storedKeys = await DHStorage.loadKeys(authUser._id);
+      if (storedKeys) {
+        dhInstance.privateKey = storedKeys.privateKey;
+        dhInstance.publicKey = storedKeys.publicKey;
+        dhInstance.sharedKeys = storedKeys.sharedKeys;
+        console.log('Restored DH keys from storage');
+      }
+    }
+  },
+
+  // Save current DH state
+  saveDHState: () => {
+    const authUser = authState.getState().authUser;
+    if (!authUser || !dhInstance) return;
+
+    if (dhInstance.privateKey && dhInstance.publicKey) {
+      DHStorage.saveKeys(
+        authUser._id,
+        dhInstance.privateKey,
+        dhInstance.publicKey,
+        dhInstance.sharedKeys
+      );
+    }
+  },
+
   getAccounts: async () => {
     set({ isUsersLoading: true });
     try {
       const res = await axiosInstance.get("/messages/users");
       set({ users: res.data });
+      
+      // Initialize DH instance when users are loaded
+      await get().initializeDHInstance();
     } catch (error) {
       toast.error(error.response.data.message);
     } finally {
@@ -43,20 +120,22 @@ export const chatState = create((set, get) => ({
         } 
       });
 
-      // Create new DH instance if needed
-      if (!dhInstance) {
-        dhInstance = new DHKeyExchange();
+      // Initialize DH instance if needed
+      await get().initializeDHInstance();
+      
+      // Generate new keys if not already generated
+      if (!dhInstance.privateKey) {
+        const keys = await dhInstance.generateKeys();
+        console.log("Generated DH keys, public key:", keys.publicKey);
+        get().saveDHState();
       }
 
-      const keys = await dhInstance.generateKeys();
-      console.log("Generated DH keys, public key:", keys.publicKey);
-
-      // For now, simulate key exchange via socket (you can add HTTP endpoint later)
+      // Send key exchange request via socket
       const socket = authState.getState().socket;
       if (socket) {
         socket.emit("keyExchangeRequest", {
           targetUserId: selectedUser._id,
-          publicKey: keys.publicKey,
+          publicKey: dhInstance.getPublicKeyHex(),
           sessionId: `${authState.getState().authUser._id}-${selectedUser._id}`
         });
       }
@@ -81,15 +160,18 @@ export const chatState = create((set, get) => ({
     const { from, publicKey, sessionId } = data;
     
     try {
-      // Create DH instance if needed
-      if (!dhInstance) {
-        dhInstance = new DHKeyExchange();
+      await get().initializeDHInstance();
+      
+      // Generate keys if not already generated
+      if (!dhInstance.privateKey) {
         await dhInstance.generateKeys();
+        get().saveDHState();
       }
 
       // Compute shared secret
       const sharedKey = await dhInstance.computeSharedSecret(publicKey);
       dhInstance.storeSharedKey(from, sharedKey);
+      get().saveDHState();
 
       // Send response
       const socket = authState.getState().socket;
@@ -141,6 +223,7 @@ export const chatState = create((set, get) => ({
       const otherUserId = userId1 === myId ? userId2 : userId1;
       
       dhInstance.storeSharedKey(otherUserId, sharedKey);
+      get().saveDHState();
 
       set({ 
         dhStatus: { 
@@ -159,7 +242,8 @@ export const chatState = create((set, get) => ({
 
   // Get shared key for a user
   getSharedKeyForUser: (userId) => {
-    return dhInstance ? dhInstance.getSharedKey(userId) : null;
+    if (!dhInstance) return null;
+    return dhInstance.getSharedKey(userId);
   },
 
   // Check if we have an active shared key
@@ -183,34 +267,12 @@ export const chatState = create((set, get) => ({
   sendMsg: async (messageData) => {
     const { selectedUser, messages } = get();
     try {
-      // Check if we have a shared key and encrypt if available
-      const sharedKey = get().getSharedKeyForUser(selectedUser._id);
-      let dataToSend = { ...messageData };
-
-      if (messageData.text && sharedKey) {
-        // Encrypt the message
-        const iv = crypto.getRandomValues(new Uint8Array(12));
-        const encodedText = new TextEncoder().encode(messageData.text);
-        
-        const encrypted = await crypto.subtle.encrypt(
-          {
-            name: 'AES-GCM',
-            iv: iv
-          },
-          sharedKey,
-          encodedText
-        );
-
-        dataToSend = {
-          ...messageData,
-          text: undefined, // Remove plain text
-          encData: {
-            cipherText: Array.from(new Uint8Array(encrypted)).map(b => b.toString(16).padStart(2, '0')).join(''),
-            iv: Array.from(iv).map(b => b.toString(16).padStart(2, '0')).join(''),
-            tag: '' // GCM includes auth tag in encrypted data
-          }
-        };
-      }
+      // The backend expects the standard format, so just send text normally
+      // Backend will handle encryption if DH keys are available
+      const dataToSend = {
+        text: messageData.text,
+        image: messageData.image
+      };
 
       const res = await axiosInstance.post(`/messages/send/${selectedUser._id}`, dataToSend);
       set({ messages: [...messages, res.data] });
@@ -247,4 +309,14 @@ export const chatState = create((set, get) => ({
   },
 
   setSelectedUser: (selectedUser) => set({ selectedUser }),
+
+  // Clear DH state on logout
+  clearDHState: () => {
+    const authUser = authState.getState().authUser;
+    if (authUser) {
+      DHStorage.clearKeys(authUser._id);
+    }
+    dhInstance = null;
+    set({ dhStatus: {} });
+  }
 }));

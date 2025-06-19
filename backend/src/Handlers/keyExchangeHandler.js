@@ -20,6 +20,16 @@ export const initiateKeyExchange = async (req, res) => {
 
     const sessionKey = getSessionKey(myId, targetUserId);
     
+    // Check if session already exists and is active
+    const existingSession = dhSessions.get(sessionKey);
+    if (existingSession && existingSession.status === 'completed') {
+      return res.status(200).json({ 
+        message: "Key exchange already completed",
+        sessionId: sessionKey,
+        publicKey: existingSession.publicKey
+      });
+    }
+    
     // Create new DH instance
     const dh = createDHInstance();
     const publicKey = getDHPublicKey(dh);
