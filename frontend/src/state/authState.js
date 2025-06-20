@@ -16,11 +16,21 @@ export const authState = create((set, get) => ({
 
   checkAuth: async () => {
     try {
+      console.log('Checking authentication...');
       const res = await axiosInstance.get("/auth/check");
+      console.log('Authentication successful for user:', res.data.fullName);
+      
       set({ authUser: res.data });
-      get().connectSocket();
+      
+      // Connect socket first
+      await get().connectSocket();
+      
+      // Initialize chat state after authentication is confirmed
+      const { chatState } = await import('./chatState.js');
+      await chatState.getState().initializeChatState();
+      
     } catch (error) {
-      console.log("Error in checkAuth:", error);
+      console.log("Authentication failed:", error);
       set({ authUser: null });
     } finally {
       set({ isCheckingAuth: false });
@@ -33,7 +43,13 @@ export const authState = create((set, get) => ({
       const res = await axiosInstance.post("/auth/signup", data);
       set({ authUser: res.data });
       toast.success("Account created successfully");
-      get().connectSocket();
+      
+      await get().connectSocket();
+      
+      // Initialize chat state for new user
+      const { chatState } = await import('./chatState.js');
+      await chatState.getState().initializeChatState();
+      
     } catch (error) {
       toast.error(error.response.data.message);
     } finally {
@@ -47,7 +63,13 @@ export const authState = create((set, get) => ({
       const res = await axiosInstance.post("/auth/signIn", data);
       set({ authUser: res.data });
       toast.success("Logged in successfully!");
-      get().connectSocket();
+      
+      await get().connectSocket();
+      
+      // Initialize chat state after login
+      const { chatState } = await import('./chatState.js');
+      await chatState.getState().initializeChatState();
+      
     } catch (error) {
       toast.error(error.response.data.message);
     } finally {
@@ -59,7 +81,7 @@ export const authState = create((set, get) => ({
     try {
       await axiosInstance.post("/auth/signOut");
       
-      // Clear DH state on logout
+      // Clear chat state before clearing auth
       const { chatState } = await import('./chatState.js');
       chatState.getState().clearDHState();
       
@@ -86,31 +108,60 @@ export const authState = create((set, get) => ({
   },
 
   connectSocket: () => {
-    const { authUser } = get();
-    if (!authUser || get().socket?.connected) return;
+    return new Promise((resolve) => {
+      const { authUser } = get();
+      if (!authUser || get().socket?.connected) {
+        resolve();
+        return;
+      }
 
-    const socket = io(BASE_URL, {
-      query: {
-        userId: authUser._id,
-      },
-    });
-    socket.connect();
-
-    set({ socket: socket });
-
-    socket.on("getOnlineUsers", (userIds) => {
-      set({ onlineUsers: userIds });
-    });
-
-    // Import chatState for DH handling
-    socket.on("receive-dh", (data) => {
-      import('./chatState.js').then(({ chatState }) => {
-        chatState.getState().receiveDHKey(data.fromUserId, data.publicKey);
+      console.log('Connecting socket for user:', authUser._id);
+      
+      const socket = io(BASE_URL, {
+        query: {
+          userId: authUser._id,
+        },
       });
+      
+      socket.on('connect', () => {
+        console.log('Socket connected successfully');
+        set({ socket: socket });
+        resolve();
+      });
+
+      socket.on("getOnlineUsers", (userIds) => {
+        console.log('Online users updated:', userIds.length);
+        set({ onlineUsers: userIds });
+      });
+
+      // Import chatState for DH handling
+      socket.on("receive-dh", (data) => {
+        import('./chatState.js').then(({ chatState }) => {
+          chatState.getState().receiveDHKey(data.fromUserId, data.publicKey);
+        });
+      });
+
+      socket.on('error', (error) => {
+        console.error('Socket error:', error);
+        resolve(); // Don't block on socket errors
+      });
+
+      // Fallback timeout
+      setTimeout(() => {
+        if (!socket.connected) {
+          console.warn('Socket connection timeout, continuing anyway');
+        }
+        resolve();
+      }, 5000);
     });
   },
   
   disconnectSocket: () => {
-    if (get().socket?.connected) get().socket.disconnect();
+    const socket = get().socket;
+    if (socket?.connected) {
+      console.log('Disconnecting socket');
+      socket.disconnect();
+      set({ socket: null });
+    }
   },
 }));
