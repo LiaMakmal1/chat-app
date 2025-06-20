@@ -1,51 +1,50 @@
-import express from "express"; 
+import express from "express";
 import dotenv from "dotenv";
-import cookieParser from "cookie-parser"; 
-import cors from "cors"; 
+import cookieParser from "cookie-parser";
+import cors from "cors";
 import path from "path";
 
 import { connectDB } from "./lib/db.js";
-
-import accsessEndpoint from "./endpoints/accessEndpoint.js";
-import msgEndpoint from "./endpoints/msgEndpoint.js";
 import { app, server } from "./lib/realtime.js";
-import keyExchangeEndpoint from "./endpoints/keyExchangeEndpoint.js";
 
+// Route imports
+import authRoutes from "./endpoints/accessEndpoint.js";
+import messageRoutes from "./endpoints/msgEndpoint.js";
+import keyExchangeRoutes from "./endpoints/keyExchangeEndpoint.js";
 
-// security middleware
-import { secHeaders, rateLimiter , xssProtection, validateInput, sqlProtect } from "./secureAccess/security.js";
+// Security middleware
+import { security } from "./secureAccess/index.js";
 
-dotenv.config(); // loads environment vars
+dotenv.config();
 
-const PORT = process.env.PORT;
-const __dirname = path.resolve(); // the path of the project folder
+const PORT = process.env.PORT || 5001;
+const __dirname = path.resolve();
 
-app.use(secHeaders); 
-app.use(rateLimiter ()); 
-app.use(xssProtection); 
-app.use(validateInput); 
-app.use(sqlProtect); 
+// Apply security middleware
+app.use(security);
 
-app.use(express.json({ limit: "10mb" })); 
-app.use(cookieParser()); // adds req.cookies 
-app.use( // sets CORS in order for the backend to accept requests from the frontend 
-  cors({ origin: "http://localhost:5173", credentials: true }));
+// Basic middleware
+app.use(express.json({ limit: "10mb" }));
+app.use(cookieParser());
+app.use(cors({ 
+  origin: process.env.NODE_ENV === "development" ? "http://localhost:5173" : true,
+  credentials: true 
+}));
 
-app.use("/api/auth", accsessEndpoint);
-app.use("/api/messages", msgEndpoint);
+// Routes
+app.use("/api/auth", authRoutes);
+app.use("/api/messages", messageRoutes);
+app.use("/api/keyexchange", keyExchangeRoutes);
 
-app.use("/api/keyexchange", keyExchangeEndpoint);
-
-
-if (process.env.NODE_ENV === "production") { // checks production mode
-  app.use(express.static(path.join(__dirname, "../frontend/dist"))); // serves the static files from  dist
-
-  app.get("*", (req, res) => {  // if the file doesnt matched the backend API
-    res.sendFile(path.join(__dirname, "../frontend", "dist", "index.html")); // return index.html and then the React app shows the chat page. 
+// Production setup
+if (process.env.NODE_ENV === "production") {
+  app.use(express.static(path.join(__dirname, "../frontend/dist")));
+  app.get("*", (req, res) => {
+    res.sendFile(path.join(__dirname, "../frontend/dist/index.html"));
   });
 }
 
 server.listen(PORT, () => {
-  console.log("server is running on PORT:" + PORT);
+  console.log(`Server running on port ${PORT}`);
   connectDB();
 });

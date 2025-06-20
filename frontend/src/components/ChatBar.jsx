@@ -4,10 +4,11 @@ import { chatState } from "../state/chatState";
 
 const ChatBar = () => {
   const { selectedUser, setSelectedUser, initializeDH, getSharedKeyForUser } = chatState();
-  const { onlineUsers, authUser } = authState();
+  const { onlineUsers } = authState();
 
-  // Check if we have an active shared key with this user
-  const hasSharedKey = selectedUser && getSharedKeyForUser(selectedUser._id) !== null;
+  if (!selectedUser) return null;
+
+  const hasSharedKey = getSharedKeyForUser(selectedUser._id) !== null;
 
   const handleInitiateDH = () => {
     if (!hasSharedKey) {
@@ -22,7 +23,10 @@ const ChatBar = () => {
           {/* Avatar */}
           <div className="avatar">
             <div className="size-10 rounded-full relative">
-              <img src={selectedUser.avatar || "/avatar.png"} alt={selectedUser.fullName} />
+              <img 
+                src={selectedUser.avatar || "/avatar.png"} 
+                alt={selectedUser.fullName} 
+              />
             </div>
           </div>
 
@@ -67,4 +71,5 @@ const ChatBar = () => {
     </div>
   );
 };
-export default ChatBar; // exp
+
+export default ChatBar;

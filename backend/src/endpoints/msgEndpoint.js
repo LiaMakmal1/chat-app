@@ -1,17 +1,11 @@
-// exports the routes related to the messaging 
-
-
-
 import express from "express";
-import { protectRoute } from "../secureAccess/verifyUser.js";
-import { history, UserList, sendMsg } from "../Handlers/msgHandler.js";
-import { msgLimiter } from "../secureAccess/security.js";
+import { protectRoute, limiters } from "../secureAccess/index.js";
+import { history, UserList, sendMsg } from "../handlers/msgHandler.js";
 
-const msgEndpoint = express.Router();
+const router = express.Router();
 
-msgEndpoint.get("/users", protectRoute, UserList);
-msgEndpoint.get("/:id", protectRoute, history);
+router.get("/users", protectRoute, UserList);
+router.get("/:id", protectRoute, history);
+router.post("/send/:id", protectRoute, limiters.messages, sendMsg);
 
-msgEndpoint.post("/send/:id", protectRoute, msgLimiter, sendMsg);
-
-export default msgEndpoint;
+export default router;

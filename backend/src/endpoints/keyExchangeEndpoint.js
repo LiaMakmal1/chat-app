@@ -1,19 +1,17 @@
 import express from "express";
-import { protectRoute } from "../middleware/requireAuth.js";
+import { protectRoute, createLimiter } from "../secureAccess/index.js";
 import { 
   initiateKeyExchange, 
   respondToKeyExchange, 
   completeKeyExchange 
 } from "../handlers/keyExchangeHandler.js";
-import { rateLimiter } from "../secureAccess/security.js";
 
 const router = express.Router();
 
-// Rate limiting for key exchange (max 10 per 5 minutes)
-const keyExchangeLimiter = rateLimiter(5 * 60 * 1000, 10);
+const keyLimiter = createLimiter(5 * 60 * 1000, 10, "Too many key exchange attempts");
 
-router.post("/initiate/:id", keyExchangeLimiter, protectRoute, initiateKeyExchange);
-router.post("/respond", keyExchangeLimiter, protectRoute, respondToKeyExchange);
-router.post("/complete", keyExchangeLimiter, protectRoute, completeKeyExchange);
+router.post("/initiate/:id", keyLimiter, protectRoute, initiateKeyExchange);
+router.post("/respond", keyLimiter, protectRoute, respondToKeyExchange);
+router.post("/complete", keyLimiter, protectRoute, completeKeyExchange);
 
 export default router;
