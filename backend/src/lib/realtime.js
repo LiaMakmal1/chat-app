@@ -15,8 +15,9 @@ const io = new Server(server, {
   pingInterval: 25000,
 });
 
-// Track online users
+// Track online users and typing status
 const socketMap = {}; // {userId: socketId}
+const typingUsers = new Map(); // userId -> { typingTo: userId, timeout: timeoutId }
 
 export function userSocketId(userId) {
   return socketMap[userId];
@@ -44,12 +45,62 @@ io.on("connection", (socket) => {
 
   const rateLimit = () => {
     eventCount++;
-    if (eventCount > 30) {
+    if (eventCount > 50) { // Increased limit for typing events
       socket.emit("error", "Rate limit exceeded");
       return false;
     }
     return true;
   };
+
+  // Typing indicator events
+  socket.on("typing", (data) => {
+    if (!rateLimit()) return;
+    
+    const { targetUserId, isTyping } = data;
+    const targetSocket = socketMap[targetUserId];
+    
+    if (targetSocket) {
+      if (isTyping) {
+        // User started typing
+        io.to(targetSocket).emit("userTyping", {
+          userId: userId,
+          isTyping: true
+        });
+
+        // Clear any existing timeout for this user
+        const existing = typingUsers.get(userId);
+        if (existing?.timeout) {
+          clearTimeout(existing.timeout);
+        }
+
+        // Set timeout to auto-stop typing after 3 seconds
+        const timeout = setTimeout(() => {
+          if (socketMap[targetUserId]) {
+            io.to(socketMap[targetUserId]).emit("userTyping", {
+              userId: userId,
+              isTyping: false
+            });
+          }
+          typingUsers.delete(userId);
+        }, 3000);
+
+        typingUsers.set(userId, { typingTo: targetUserId, timeout });
+      } else {
+        // User stopped typing
+        io.to(targetSocket).emit("userTyping", {
+          userId: userId,
+          isTyping: false
+        });
+
+        // Clear timeout
+        const existing = typingUsers.get(userId);
+        if (existing?.timeout) {
+          clearTimeout(existing.timeout);
+        }
+        typingUsers.delete(userId);
+      }
+    }
+  });
 
   // Key exchange events
   socket.on("keyExchangeRequest", (data) => {
@@ -79,6 +130,23 @@ io.on("connection", (socket) => {
 
   socket.on("disconnect", () => {
     delete socketMap[userId];
+    
+    // Clear any typing timeouts for this user
+    const typingData = typingUsers.get(userId);
+    if (typingData) {
+      clearTimeout(typingData.timeout);
+      
+      // Notify the target user that typing stopped
+      if (typingData.typingTo && socketMap[typingData.typingTo]) {
+        io.to(socketMap[typingData.typingTo]).emit("userTyping", {
+          userId: userId,
+          isTyping: false
+        });
+      }
+      
+      typingUsers.delete(userId);
+    }
+    
     clearInterval(resetInterval);
     io.emit("getOnlineUsers", Object.keys(socketMap));
   });

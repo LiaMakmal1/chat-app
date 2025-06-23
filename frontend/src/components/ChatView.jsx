@@ -1,4 +1,3 @@
-// components/ChatView.jsx - Simplified from complex state management
 import { useEffect, useRef } from "react";
 import { chatState } from "../state/chatState";
 import { authState } from "../state/authState";
@@ -6,6 +5,7 @@ import { formatMessageTime } from "../lib/utils";
 import ChatHeader from "./ChatBar";
 import MessageInput from "./ChatInput";
 import ChatLoading from "./skeletons/ChatLoading";
+import TypingIndicator from "./TypingIndicator";
 
 const Message = ({ message, isOwn, selectedUser, authUser }) => (
   <div className={`chat ${isOwn ? "chat-end" : "chat-start"}`}>
@@ -41,15 +41,18 @@ const Message = ({ message, isOwn, selectedUser, authUser }) => (
 );
 
 const ChatView = () => {
-  const { messages, selectedUser, loading } = chatState();
+  const { messages, selectedUser, loading, isUserTyping } = chatState();
   const { authUser } = authState();
   const messagesEndRef = useRef(null);
 
   useEffect(() => {
-    if (messages.length > 0) {
+    // Delay scroll slightly to ensure typing indicator is rendered
+    const scrollTimeout = setTimeout(() => {
       messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-    }
-  }, [messages]);
+    }, 50);
+
+    return () => clearTimeout(scrollTimeout);
+  }, [messages, isUserTyping, selectedUser?._id]);
 
   if (loading.messages) {
     return (
@@ -65,26 +68,35 @@ const ChatView = () => {
     <div className="flex-1 flex flex-col overflow-auto">
       <ChatHeader />
 
-      <div className="flex-1 overflow-y-auto p-4 space-y-4">
-        {messages.length > 0 ? (
-          messages.map((message) => (
-            <Message
-              key={message._id}
-              message={message}
-              isOwn={message.fromUserId === authUser._id}
-              selectedUser={selectedUser}
-              authUser={authUser}
-            />
-          ))
-        ) : (
-          <div className="flex-1 flex items-center justify-center">
-            <div className="text-center text-base-content/60">
-              <p className="text-lg mb-2">No messages yet</p>
-              <p className="text-sm">Start the conversation!</p>
+      <div className="flex-1 overflow-y-auto p-4 pb-2">
+        <div className="space-y-4">
+          {messages.length > 0 ? (
+            messages.map((message) => (
+              <Message
+                key={message._id}
+                message={message}
+                isOwn={message.fromUserId === authUser._id}
+                selectedUser={selectedUser}
+                authUser={authUser}
+              />
+            ))
+          ) : (
+            <div className="flex-1 flex items-center justify-center min-h-[200px]">
+              <div className="text-center text-base-content/60">
+                <p className="text-lg mb-2">No messages yet</p>
+                <p className="text-sm">Start the conversation!</p>
+              </div>
             </div>
+          )}
+          
+          {/* Typing indicator with extra padding */}
+          <div className="pb-4">
+            <TypingIndicator />
           </div>
-        )}
-        <div ref={messagesEndRef} />
+          
+          {/* Scroll anchor with extra space */}
+          <div ref={messagesEndRef} className="h-4" />
+        </div>
       </div>
 
       <MessageInput />

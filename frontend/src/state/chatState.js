@@ -1,4 +1,3 @@
-// state/chatState.js - Fixed imports and simplified logic
 import { create } from "zustand";
 import { axiosInstance } from "../lib/axios";
 import { cryptoManager } from "../lib/crypto";
@@ -9,6 +8,7 @@ export const chatState = create((set, get) => ({
   users: [],
   selectedUser: null,
   loading: { users: false, messages: false },
+  typingUsers: new Set(), // Set of user IDs who are typing
   
   // Load all users except current user
   async getAccounts() {
@@ -61,7 +61,13 @@ export const chatState = create((set, get) => ({
     const { selectedUser } = get();
     if (selectedUser?._id === user?._id) return; // Prevent unnecessary updates
     
-    set({ selectedUser: user, messages: [] });
+    // Clear typing indicators when switching users
+    set({ 
+      selectedUser: user, 
+      messages: [],
+      typingUsers: new Set()
+    });
+    
     if (user) get().history(user._id);
     
     // Save to session storage
@@ -72,6 +78,41 @@ export const chatState = create((set, get) => ({
         sessionStorage.removeItem('selectedUser');
       }
     } catch (e) {} // Ignore storage errors
+  },
+
+  // Typing indicator functions
+  sendTypingIndicator(isTyping) {
+    const { selectedUser } = get();
+    if (!selectedUser) return;
+
+    import('./authState').then(({ authState }) => {
+      const socket = authState.getState().socket;
+      if (socket) {
+        socket.emit("typing", {
+          targetUserId: selectedUser._id,
+          isTyping
+        });
+      }
+    });
+  },
+
+  handleUserTyping(data) {
+    const { selectedUser, typingUsers } = get();
+    if (!selectedUser || data.userId !== selectedUser._id) return;
+
+    const newTypingUsers = new Set(typingUsers);
+    
+    if (data.isTyping) {
+      newTypingUsers.add(data.userId);
+    } else {
+      newTypingUsers.delete(data.userId);
+    }
+    
+    set({ typingUsers: newTypingUsers });
+  },
+
+  isUserTyping(userId) {
+    return get().typingUsers.has(userId);
   },
 
   // Initialize key exchange
@@ -168,6 +209,7 @@ export const chatState = create((set, get) => ({
       socket.on("newMsg", get().addMessage);
       socket.on("keyExchangeRequest", get().handleKeyExchangeRequest);
       socket.on("keyExchangeResponse", get().handleKeyExchangeResponse);
+      socket.on("userTyping", get().handleUserTyping);
     });
   },
 
@@ -180,6 +222,7 @@ export const chatState = create((set, get) => ({
       socket.off("newMsg", get().addMessage);
       socket.off("keyExchangeRequest", get().handleKeyExchangeRequest);
       socket.off("keyExchangeResponse", get().handleKeyExchangeResponse);
+      socket.off("userTyping", get().handleUserTyping);
     });
   },
 
@@ -213,7 +256,8 @@ export const chatState = create((set, get) => ({
       messages: [],
       users: [],
       selectedUser: null,
-      loading: { users: false, messages: false }
+      loading: { users: false, messages: false },
+      typingUsers: new Set()
     });
   }
 }));
