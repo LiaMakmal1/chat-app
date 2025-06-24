@@ -4,208 +4,145 @@ import { cryptoManager } from "../lib/crypto";
 import toast from "react-hot-toast";
 
 export const chatState = create((set, get) => ({
-  messages: [],
-  users: [],
-  selectedUser: null,
+  messages: [], users: [], selectedUser: null,
   loading: { users: false, messages: false },
-  typingUsers: new Set(), // Set of user IDs who are typing
+  typingUsers: new Set(),
   
-  // Load all users except current user
   async getAccounts() {
     set(state => ({ loading: { ...state.loading, users: true } }));
     try {
       const { data } = await axiosInstance.get("/messages/users");
       set({ users: data });
-    } catch (error) {
-      toast.error("Failed to load users");
-    } finally {
-      set(state => ({ loading: { ...state.loading, users: false } }));
-    }
+    } catch (error) { toast.error("Failed to load users"); }
+    finally { set(state => ({ loading: { ...state.loading, users: false } })); }
   },
 
-  // Load message history for selected user
   async history(userId) {
     if (!userId) return;
-    
     set(state => ({ loading: { ...state.loading, messages: true } }));
     try {
       const { data } = await axiosInstance.get(`/messages/${userId}`);
       set({ messages: data });
-    } catch (error) {
-      toast.error("Failed to load messages");
-    } finally {
-      set(state => ({ loading: { ...state.loading, messages: false } }));
-    }
+    } catch (error) { toast.error("Failed to load messages"); }
+    finally { set(state => ({ loading: { ...state.loading, messages: false } })); }
   },
 
-  // Send message
   async sendMsg(messageData) {
     const { selectedUser, messages } = get();
     if (!selectedUser) return toast.error("No user selected");
-
     try {
       const { data } = await axiosInstance.post(`/messages/send/${selectedUser._id}`, messageData);
-      
-      // Check if message already exists in state (to prevent duplicates)
       const messageExists = messages.some(m => m._id === data._id);
-      if (!messageExists) {
-        set({ messages: [...messages, data] });
-      }
-    } catch (error) {
-      toast.error("Failed to send message");
-    }
+      if (!messageExists) set({ messages: [...messages, data] });
+    } catch (error) { toast.error("Failed to send message"); }
   },
 
-  // Set selected user and load their messages
+  // FIXED: Auto-initiate DH when selecting user
   setSelectedUser(user) {
     const { selectedUser } = get();
-    if (selectedUser?._id === user?._id) return; // Prevent unnecessary updates
+    if (selectedUser?._id === user?._id) return;
     
-    // Clear typing indicators when switching users
-    set({ 
-      selectedUser: user, 
-      messages: [],
-      typingUsers: new Set()
-    });
+    set({ selectedUser: user, messages: [], typingUsers: new Set() });
     
-    if (user) get().history(user._id);
+    if (user) {
+      get().history(user._id);
+      
+      // AUTO-INITIATE DH KEY EXCHANGE
+      setTimeout(() => {
+        if (!get().getSharedKeyForUser(user._id)) {
+          console.log(`Auto-initiating DH key exchange with ${user.fullName}`);
+          get().initializeDH();
+        }
+      }, 500); // Small delay to ensure socket is ready
+    }
     
-    // Save to session storage
     try {
-      if (user) {
-        sessionStorage.setItem('selectedUser', JSON.stringify(user));
-      } else {
-        sessionStorage.removeItem('selectedUser');
-      }
-    } catch (e) {} // Ignore storage errors
+      if (user) sessionStorage.setItem('selectedUser', JSON.stringify(user));
+      else sessionStorage.removeItem('selectedUser');
+    } catch (e) {}
   },
 
-  // Typing indicator functions
   sendTypingIndicator(isTyping) {
     const { selectedUser } = get();
     if (!selectedUser) return;
-
     import('./authState').then(({ authState }) => {
       const socket = authState.getState().socket;
-      if (socket) {
-        socket.emit("typing", {
-          targetUserId: selectedUser._id,
-          isTyping
-        });
-      }
+      if (socket) socket.emit("typing", { targetUserId: selectedUser._id, isTyping });
     });
   },
 
   handleUserTyping(data) {
     const { selectedUser, typingUsers } = get();
     if (!selectedUser || data.userId !== selectedUser._id) return;
-
     const newTypingUsers = new Set(typingUsers);
-    
-    if (data.isTyping) {
-      newTypingUsers.add(data.userId);
-    } else {
-      newTypingUsers.delete(data.userId);
-    }
-    
+    data.isTyping ? newTypingUsers.add(data.userId) : newTypingUsers.delete(data.userId);
     set({ typingUsers: newTypingUsers });
   },
 
-  isUserTyping(userId) {
-    return get().typingUsers.has(userId);
-  },
+  isUserTyping: (userId) => get().typingUsers.has(userId),
 
-  // Initialize key exchange
   async initializeDH() {
     const { selectedUser } = get();
-    if (!selectedUser) return toast.error("No user selected");
-
+    if (!selectedUser) return;
+    
+    // Check if we already have a key
+    if (get().getSharedKeyForUser(selectedUser._id)) {
+      console.log(`DH key already exists for ${selectedUser.fullName}`);
+      return;
+    }
+    
     try {
+      console.log(`Initiating DH key exchange with ${selectedUser.fullName}`);
       const publicKey = await cryptoManager.exportPublicKey();
-      
-      // Get socket from auth state
       const { authState } = await import('./authState');
       const socket = authState.getState().socket;
-      
-      if (socket) {
-        socket.emit("keyExchangeRequest", {
-          targetUserId: selectedUser._id,
-          publicKey
-        });
-        toast.success("Key exchange initiated");
+      if (socket) { 
+        socket.emit("keyExchangeRequest", { targetUserId: selectedUser._id, publicKey }); 
+        // Don't show toast for automatic key exchange
       }
-    } catch (error) {
-      console.error('DH initialization failed:', error);
-      toast.error("Failed to initiate key exchange");
+    } catch (error) { 
+      console.error("Failed to initiate automatic key exchange:", error);
     }
   },
 
-  // Handle incoming key exchange request
   async handleKeyExchangeRequest(data) {
     try {
+      console.log(`Received DH key exchange request from user ${data.from}`);
       await cryptoManager.deriveSharedKey(data.publicKey, data.from);
       const myPublicKey = await cryptoManager.exportPublicKey();
-      
       const { authState } = await import('./authState');
       const socket = authState.getState().socket;
-      
-      if (socket) {
-        socket.emit("keyExchangeResponse", {
-          targetUserId: data.from,
-          publicKey: myPublicKey,
-          accepted: true
-        });
-      }
-      
-      toast.success("Secure connection established");
-    } catch (error) {
-      console.error('Key exchange request failed:', error);
-      toast.error("Key exchange failed");
+      if (socket) socket.emit("keyExchangeResponse", { targetUserId: data.from, publicKey: myPublicKey, accepted: true });
+      console.log("DH key exchange completed successfully");
+    } catch (error) { 
+      console.error("Key exchange failed:", error);
     }
   },
 
-  // Handle key exchange response
   async handleKeyExchangeResponse(data) {
-    if (!data.accepted) return toast.error("Key exchange rejected");
-    
+    if (!data.accepted) return console.log("Key exchange was rejected");
     try {
+      console.log(`Received DH key exchange response from user ${data.from}`);
       await cryptoManager.deriveSharedKey(data.publicKey, data.from);
-      toast.success("Secure connection established");
-    } catch (error) {
-      console.error('Key exchange response failed:', error);
-      toast.error("Key exchange failed");
+      console.log("DH key exchange completed successfully");
+    } catch (error) { 
+      console.error("Key exchange response failed:", error);
     }
   },
 
-  // Socket message handling with better deduplication
   addMessage(message) {
     const { messages, selectedUser } = get();
-    
-    // Check if message is relevant to current conversation
     const isRelevant = message.fromUserId === selectedUser?._id || message.toUserId === selectedUser?._id;
     if (!isRelevant) return;
-    
-    // Check for duplicates more thoroughly
-    const isDuplicate = messages.some(m => 
-      m._id === message._id || 
-      (m.createdAt === message.createdAt && 
-       m.fromUserId === message.fromUserId && 
-       m.toUserId === message.toUserId &&
-       m.text === message.text &&
-       m.image === message.image)
-    );
-    
-    if (!isDuplicate) {
-      set({ messages: [...messages, message] });
-    }
+    const isDuplicate = messages.some(m => m._id === message._id || 
+      (m.createdAt === message.createdAt && m.fromUserId === message.fromUserId && m.toUserId === message.toUserId && m.text === message.text));
+    if (!isDuplicate) set({ messages: [...messages, message] });
   },
 
-  // Setup socket listeners
   setupSocket() {
     import('./authState').then(({ authState }) => {
       const socket = authState.getState().socket;
       if (!socket) return;
-
       socket.on("newMsg", get().addMessage);
       socket.on("keyExchangeRequest", get().handleKeyExchangeRequest);
       socket.on("keyExchangeResponse", get().handleKeyExchangeResponse);
@@ -213,30 +150,19 @@ export const chatState = create((set, get) => ({
     });
   },
 
-  // Cleanup socket listeners
   cleanupSocket() {
     import('./authState').then(({ authState }) => {
       const socket = authState.getState().socket;
       if (!socket) return;
-
-      socket.off("newMsg", get().addMessage);
-      socket.off("keyExchangeRequest", get().handleKeyExchangeRequest);
-      socket.off("keyExchangeResponse", get().handleKeyExchangeResponse);
-      socket.off("userTyping", get().handleUserTyping);
+      socket.off("newMsg", get().addMessage); socket.off("keyExchangeRequest", get().handleKeyExchangeRequest);
+      socket.off("keyExchangeResponse", get().handleKeyExchangeResponse); socket.off("userTyping", get().handleUserTyping);
     });
   },
 
-  // Check if user has shared key
-  getSharedKeyForUser(userId) {
-    return cryptoManager.getSharedKey(userId);
-  },
+  getSharedKeyForUser: (userId) => cryptoManager.getSharedKey(userId),
 
-  // Initialize chat state
   async initialize() {
-    await get().getAccounts();
-    get().setupSocket();
-    
-    // Restore selected user from session
+    await get().getAccounts(); get().setupSocket();
     try {
       const stored = sessionStorage.getItem('selectedUser');
       if (stored) {
@@ -244,20 +170,11 @@ export const chatState = create((set, get) => ({
         const validUser = get().users.find(u => u._id === user._id);
         if (validUser) get().setSelectedUser(validUser);
       }
-    } catch (e) {} // Ignore storage errors
+    } catch (e) {}
   },
 
-  // Reset state on logout
   reset() {
-    get().cleanupSocket();
-    sessionStorage.removeItem('selectedUser');
-    cryptoManager.clearKeys();
-    set({
-      messages: [],
-      users: [],
-      selectedUser: null,
-      loading: { users: false, messages: false },
-      typingUsers: new Set()
-    });
+    get().cleanupSocket(); sessionStorage.removeItem('selectedUser'); cryptoManager.clearKeys();
+    set({ messages: [], users: [], selectedUser: null, loading: { users: false, messages: false }, typingUsers: new Set() });
   }
 }));

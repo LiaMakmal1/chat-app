@@ -1,4 +1,4 @@
-import { useRef, useState, useEffect } from "react";
+import { useRef, useState } from "react";
 import { chatState } from "../state/chatState";
 import { Image, Send, X } from "lucide-react";
 import toast from "react-hot-toast";
@@ -6,59 +6,8 @@ import toast from "react-hot-toast";
 const ChatInput = () => {
   const [text, setText] = useState("");
   const [imagePreview, setImagePreview] = useState(null);
-  const [isTyping, setIsTyping] = useState(false);
   const fileInputRef = useRef(null);
-  const typingTimeoutRef = useRef(null);
-  const { sendMsg, sendTypingIndicator } = chatState();
-
-  // Handle typing indicator logic
-  useEffect(() => {
-    if (text.trim()) {
-      if (!isTyping) {
-        setIsTyping(true);
-        sendTypingIndicator(true);
-      }
-
-      // Clear existing timeout
-      if (typingTimeoutRef.current) {
-        clearTimeout(typingTimeoutRef.current);
-      }
-
-      // Set new timeout to stop typing indicator
-      typingTimeoutRef.current = setTimeout(() => {
-        setIsTyping(false);
-        sendTypingIndicator(false);
-      }, 1000); // Stop typing indicator after 1 second of inactivity
-    } else {
-      // Text is empty, stop typing immediately
-      if (isTyping) {
-        setIsTyping(false);
-        sendTypingIndicator(false);
-      }
-      if (typingTimeoutRef.current) {
-        clearTimeout(typingTimeoutRef.current);
-      }
-    }
-
-    // Cleanup function
-    return () => {
-      if (typingTimeoutRef.current) {
-        clearTimeout(typingTimeoutRef.current);
-      }
-    };
-  }, [text, isTyping, sendTypingIndicator]);
-
-  // Stop typing indicator when component unmounts or user changes
-  useEffect(() => {
-    return () => {
-      if (isTyping) {
-        sendTypingIndicator(false);
-      }
-      if (typingTimeoutRef.current) {
-        clearTimeout(typingTimeoutRef.current);
-      }
-    };
-  }, []);
+  const { sendMsg } = chatState();
 
   const handleImageChange = (e) => {
     const file = e.target.files[0];
@@ -83,12 +32,6 @@ const ChatInput = () => {
     e.preventDefault();
     if (!text.trim() && !imagePreview) return;
 
-    // Stop typing indicator immediately when sending
-    if (isTyping) {
-      setIsTyping(false);
-      sendTypingIndicator(false);
-    }
-
     try {
       await sendMsg({
         text: text.trim() || undefined,
@@ -102,10 +45,6 @@ const ChatInput = () => {
     } catch (error) {
       toast.error("Failed to send message");
     }
-  };
-
-  const handleTextChange = (e) => {
-    setText(e.target.value);
   };
 
   return (
@@ -136,7 +75,7 @@ const ChatInput = () => {
             className="w-full input input-bordered rounded-lg input-sm sm:input-md"
             placeholder="Type a message..."
             value={text}
-            onChange={handleTextChange}
+            onChange={(e) => setText(e.target.value)}
           />
           
           <input
