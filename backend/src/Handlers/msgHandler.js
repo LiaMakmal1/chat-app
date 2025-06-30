@@ -1,4 +1,3 @@
-// handlers/msgHandler.js - Simplified from 200+ lines to ~80 lines
 import User from "../schema/userSchema.js";
 import Message from "../schema/msgSchema.js";
 import { userSocketId, io } from "../lib/realtime.js";
@@ -6,7 +5,6 @@ import { encText, decText, aesEncryptWithKey, aesDecryptWithKey } from "../lib/e
 import { getSharedKey } from "./keyExchangeHandler.js";
 import cloudinary from "../lib/cloudinary.js";
 
-// Get all users except current user
 export const UserList = async (req, res) => {
   try {
     const users = await User.find({ _id: { $ne: req.user._id } })
@@ -17,7 +15,6 @@ export const UserList = async (req, res) => {
   }
 };
 
-// Get message history between two users
 export const history = async (req, res) => {
   try {
     const { id: receiverId } = req.params;
@@ -30,7 +27,6 @@ export const history = async (req, res) => {
       ],
     }).sort({ createdAt: 1 });
 
-    // Decrypt messages
     const decryptedMessages = await Promise.all(
       messages.map(async (msg) => {
         const obj = msg.toObject();
@@ -45,9 +41,6 @@ export const history = async (req, res) => {
             obj.text = "[Unable to decrypt]";
           }
           delete obj.encData;
-        } else if (msg.text === "[Encrypted]" && !msg.encData) {
-          // Handle case where text is "[Encrypted]" but no encData (shouldn't happen, but safety)
-          delete obj.text;
         }
         
         return obj;
@@ -60,7 +53,6 @@ export const history = async (req, res) => {
   }
 };
 
-// Send message
 export const sendMsg = async (req, res) => {
   try {
     const { text, image } = req.body;
@@ -73,32 +65,22 @@ export const sendMsg = async (req, res) => {
 
     let imageUrl;
     if (image) {
-      try {
-        const { secure_url } = await cloudinary.uploader.upload(image, {
-          folder: "chat_images",
-          resource_type: "auto",
-          quality: "auto:good"
-        });
-        imageUrl = secure_url;
-      } catch (error) {
-        return res.status(500).json({ error: "Image upload failed" });
-      }
+      const { secure_url } = await cloudinary.uploader.upload(image, {
+        folder: "chat_images",
+        resource_type: "auto",
+        quality: "auto:good"
+      });
+      imageUrl = secure_url;
     }
 
-    // Encrypt text if provided
     let encData;
     if (text) {
-      try {
-        const sharedKey = getSharedKey(fromUserId, toUserId);
-        encData = sharedKey 
-          ? aesEncryptWithKey(text, sharedKey)
-          : encText(text);
-      } catch (error) {
-        return res.status(500).json({ error: "Encryption failed" });
-      }
+      const sharedKey = getSharedKey(fromUserId, toUserId);
+      encData = sharedKey 
+        ? aesEncryptWithKey(text, sharedKey)
+        : encText(text);
     }
 
-    // Create and save message
     const message = await Message.create({
       fromUserId,
       toUserId,
@@ -107,23 +89,20 @@ export const sendMsg = async (req, res) => {
       image: imageUrl,
     });
 
-    // Send to recipient via socket
     const recipientSocket = userSocketId(toUserId);
     if (recipientSocket) {
       io.to(recipientSocket).emit("newMsg", {
         ...message.toObject(),
-        text: text || undefined, // Only send text if it exists
+        text: text || undefined,
         encData: undefined
       });
     }
 
-    // Return response with decrypted text
     res.status(201).json({
       ...message.toObject(),
-      text: text || undefined, // Only include text if it exists
+      text: text || undefined,
       encData: undefined
     });
-
   } catch (error) {
     res.status(500).json({ error: "Message send failed" });
   }
