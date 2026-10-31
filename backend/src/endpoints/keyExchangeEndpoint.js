@@ -4,7 +4,7 @@ import {
   initiateKeyExchange, 
   respondToKeyExchange, 
   completeKeyExchange 
-} from "../handlers/keyExchangeHandler.js";
+} from "../Handlers/keyExchangeHandler.js";
 
 const router = express.Router();
 
