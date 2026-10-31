@@ -28,7 +28,10 @@ if (cluster.isPrimary) {
   });
 
 } else {
-  // Worker processes run the actual server
-  await import("./index.js");
+  // Worker processes run the actual server.
+  // Note: online users and key-exchange sessions live in each worker's memory,
+  // so real-time features across workers would need sticky sessions and a shared
+  // Socket.IO adapter (e.g. Redis). `npm start` runs a single process.
+  await import("./mainServer.js");
   console.log(`Worker process ${process.pid} started`);
 }
