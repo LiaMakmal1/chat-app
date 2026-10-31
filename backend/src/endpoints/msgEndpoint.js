@@ -1,6 +1,6 @@
 import express from "express";
 import { protectRoute, limiters } from "../secureAccess/index.js";
-import { history, UserList, sendMsg } from "../handlers/msgHandler.js";
+import { history, UserList, sendMsg } from "../Handlers/msgHandler.js";
 
 const router = express.Router();
 
