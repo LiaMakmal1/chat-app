@@ -20,16 +20,16 @@ dotenv.config();
 const PORT = process.env.PORT || 5001;
 const __dirname = path.resolve();
 
-// Apply security middleware
-app.use(security);
-
-// Basic middleware
+// Basic middleware (the body must be parsed before the security checks can inspect it)
 app.use(express.json({ limit: "10mb" }));
 app.use(cookieParser());
-app.use(cors({ 
+app.use(cors({
   origin: process.env.NODE_ENV === "development" ? "http://localhost:5173" : true,
-  credentials: true 
+  credentials: true
 }));
+
+// Apply security middleware
+app.use(security);
 
 // Routes
 app.use("/api/auth", authRoutes);
