@@ -70,7 +70,7 @@ export default function ChatBar() {
             }`}
             title={
               hasSharedKey 
-                ? 'End-to-end encryption is active' 
+                ? 'Key exchange complete. Messages are encrypted at rest on the server (not end-to-end yet)'
                 : isExchangingKeys
                 ? 'Exchanging encryption keys...'
                 : 'Click to retry key exchange'
@@ -92,7 +92,7 @@ export default function ChatBar() {
       {/* Status indicator */}
       <div className="mt-2 text-xs text-center">
         {hasSharedKey && (
-          <span className="text-green-600">🔒 End-to-end encrypted</span>
+          <span className="text-green-600">🔒 Keys exchanged · encrypted at rest</span>
         )}
         {isExchangingKeys && (
           <span className="text-blue-600">🔄 Securing connection...</span>
