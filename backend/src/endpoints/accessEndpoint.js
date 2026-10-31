@@ -1,5 +1,5 @@
 import express from "express";
-import { checkAuth, signIn, signOut, signup, updateProfile } from "../handlers/accountHandler.js";
+import { checkAuth, signIn, signOut, signup, updateProfile } from "../Handlers/accountHandler.js";
 import { protectRoute, limiters } from "../secureAccess/index.js";
 
 const router = express.Router();
